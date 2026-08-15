@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="COT Positioning Dashboard — cross-market positioning-extremes from the CFTC Commitment of Traders report.">
+<title>COT Positioning Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     Design system — "Positioning Ledger"
+     ink navy bg / panel slate / hairline / paper text
+     long amber / short brick / confluence teal
+     ============================================================ */
+  :root {
+    --bg:         #0F1720;
+    --panel:      #16212C;
+    --panel-2:    #1B2836;
+    --hairline:   #2C3B4A;
+    --paper:      #ECE8DD;
+    --paper-dim:  #9AA7B4;
+    --paper-faint:#5E6E7E;
+    --long:       #D3A24C;
+    --short:      #BD5B45;
+    --confluence: #5FAE9E;
+    --steel:      #3E5060;
+    --steel-2:    #2A3A49;
+    --ok:         #6BBF7E;
+    --err:        #D3725F;
+    --serif: 'Spectral', Georgia, 'Times New Roman', serif;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--paper);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-image:
+      radial-gradient(1200px 500px at 80% -10%, rgba(95,174,158,0.06), transparent 60%),
+      radial-gradient(900px 400px at 10% -10%, rgba(211,162,76,0.05), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+  }
+
+  /* ---------- Header ---------- */
+  header.mast {
+    padding: 34px 0 22px;
+    border-bottom: 1px solid var(--hairline);
+    position: relative;
+  }
+  .mast .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+    margin: 0 0 10px;
+  }
+  .mast h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(26px, 4vw, 40px);
+    margin: 0 0 6px;
+    letter-spacing: 0.01em;
+  }
+  .mast h1 .amp { color: var(--long); }
+  .mast .sub {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--paper-dim);
+    margin: 0;
+  }
+
+  .mast-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .statusline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--paper-dim);
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--paper-dim);
+  }
+  .pill .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--paper-faint);
+  }
+  .pill.sample .dot { background: var(--long); }
+  .pill.live   .dot { background: var(--ok); }
+  .pill.live   { border-color: rgba(107,191,126,0.45); color: var(--ok); }
+
+  .actions { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--paper);
+    background: var(--panel-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  .btn:hover { border-color: var(--long); background: #223241; }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { border-color: var(--long); background: rgba(211,162,76,0.12); }
+  .btn.primary:hover { background: rgba(211,162,76,0.22); }
+  .btn .spin {
+    display: none;
+    width: 11px; height: 11px;
+    border: 2px solid rgba(236,232,221,0.3);
+    border-top-color: var(--paper);
+    border-radius: 50%;
+    animation: rot .7s linear infinite;
+    vertical-align: -1px;
+  }
+  .btn.loading .spin { display: inline-block; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* ---------- Banner ---------- */
+  .banner {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px solid rgba(211,114,95,0.5);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: rgba(211,114,95,0.08);
+    color: var(--err);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .banner.show { display: block; }
+  .banner .retry { margin-left: 8px; color: var(--paper); text-decoration: underline; cursor: pointer; }
+
+  /* ---------- Legend ---------- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: 18px 0 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--paper-dim);
+  }
+  .legend .item { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  .sw.long  { background: var(--long); }
+  .sw.short { background: var(--short); }
+  .sw.cf    { background: var(--confluence); }
+  .sw.mid   { background: var(--steel); }
+
+  /* ---------- How-to-read panel ---------- */
+  .howto {
+    margin: 18px 0 0;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+  }
+  .howto summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--paper-dim);
+    list-style: none;
+    user-select: none;
+  }
+  .howto summary::-webkit-details-marker { display: none; }
+  .howto summary::before { content: '\25B8  '; color: var(--long); }
+  .howto[open] summary::before { content: '\25BE  '; }
+  .howto summary:hover { color: var(--paper); }
+  .howto-body {
+    padding: 4px 16px 16px;
+    border-top: 1px solid var(--hairline);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--paper-dim);
+  }
+  .howto-body h4 {
+    margin: 14px 0 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--paper);
+  }
+  .howto-body p { margin: 0 0 8px; }
+  .howto-body ul { margin: 0 0 8px; padding-left: 18px; }
+  .howto-body li { margin: 0 0 5px; }
+  .howto-body b, .howto-body strong { color: var(--paper); }
+
+  /* ---------- Sector sections ---------- */
+  section.sector { margin-top: 26px; }
+  .sector-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .sector-head h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 20px;
+    margin: 0;
+  }
+  .sector-head .sector-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--paper-faint);
+  }
+
+  /* ---------- Market row ---------- */
+  .market {
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .market:hover { border-color: #3A4C5E; }
+  .market.confluence { border-color: rgba(95,174,158,0.55); box-shadow: 0 0 0 1px rgba(95,174,158,0.25); }
+  .market .row {
+    display: grid;
+    grid-template-columns: 88px 150px 1fr 54px 108px 96px 22px;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .m-ticker {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: var(--paper);
+    white-space: nowrap;
+    position: relative;
+  }
+  .m-ticker::before {
+    content: '';
+    position: absolute; left: -10px; top: 50%;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--paper-faint);
+    transform: translateY(-50%);
+  }
+  .m-name {
+    font-size: 13px;
+    color: var(--paper-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bar-cell { position: relative; height: 30px; }
+
+  .track {
+    position: relative;
+    height: 26px;
+    margin: 0 6px;
+  }
+  .track .ruler {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(236,232,221,0.10);
+  }
+  .track .ruler.tick { background: rgba(236,232,221,0.05); }
+  .track .ruler.mid { background: rgba(236,232,221,0.35); width: 1.5px; }
+  .track .ruler-label {
+    position: absolute;
+    top: 100%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 8.5px;
+    color: var(--paper-faint);
+  }
+  .specbar {
+    position: absolute;
+    top: 5px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--steel);
+    opacity: 0.9;
+    transition: left .3s, width .3s;
+  }
+  .specbar.off { opacity: 0.55; }
+  .specbar.ext-long  { background: var(--long); }
+  .specbar.ext-short { background: var(--short); }
+  .comm-marker {
+    position: absolute;
+    top: 1px;
+    width: 3px;
+    height: 22px;
+    border-radius: 1px;
+    background: var(--paper-faint);
+    transform: translateX(-1.5px);
+    opacity: 0.75;
+  }
+  .comm-marker.cf { background: var(--confluence); opacity: 1; box-shadow: 0 0 5px rgba(95,174,158,0.6); }
+
+  .m-pct {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: right;
+  }
+  .m-pct.pct-long  { color: var(--long); }
+  .m-pct.pct-short { color: var(--short); }
+
+  .m-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+  }
+  .badge.ext-long  { color: var(--long);  border-color: rgba(211,162,76,0.5);  background: rgba(211,162,76,0.10); }
+  .badge.ext-short { color: var(--short); border-color: rgba(189,91,69,0.5);   background: rgba(189,91,69,0.10); }
+  .badge.cf        { color: var(--confluence); border-color: rgba(95,174,158,0.55); background: rgba(95,174,158,0.12); }
+  .badge.wow {
+    color: var(--paper-dim);
+    border-color: var(--hairline);
+    background: rgba(44,59,74,0.3);
+    font-weight: 500;
+  }
+  .badge.wow.up   { color: var(--long); }
+  .badge.wow.down { color: var(--short); }
+
+  .m-chev { color: var(--paper-faint); font-size: 12px; text-align: right; transition: transform .15s; }
+  .market.open .m-chev { transform: rotate(90deg); }
+
+  /* ---------- Detail ---------- */
+  .detail {
+    display: none;
+    border-top: 1px solid var(--hairline);
+    padding: 16px;
+    background: rgba(27,40,54,0.5);
+  }
+  .market.open .detail { display: block; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(-3px);} to { opacity: 1; transform: none;} }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .detail h3 {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+    margin: 0 0 10px;
+  }
+  .spark svg { width: 100%; height: auto; display: block; }
+  .spark .sw-legend { display: flex; gap: 16px; margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--paper-dim); }
+  .spark .sw-legend .item { display: inline-flex; align-items: center; gap: 6px; }
+  .spark .sw-legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    padding: 10px 12px;
+  }
+  .stat .k {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+    margin-bottom: 5px;
+  }
+  .stat .v {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .stat .v.pos  { color: var(--long); }
+  .stat .v.neg  { color: var(--short); }
+  .stat .v.neut { color: var(--paper-dim); }
+  .stat .v.cf   { color: var(--confluence); }
+  .stat .subv { font-family: var(--mono); font-size: 10.5px; color: var(--paper-faint); margin-top: 3px; }
+
+  .note {
+    margin-top: 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--paper-faint);
+    border-left: 2px solid var(--hairline);
+    padding-left: 12px;
+  }
+
+  /* ---------- Footer ---------- */
+  footer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--paper-faint);
+  }
+
+  /* ---------- Empty / skeleton ---------- */
+  .empty {
+    padding: 26px;
+    text-align: center;
+    color: var(--paper-faint);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    border: 1px dashed var(--hairline);
+    border-radius: 6px;
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 900px) {
+    .market .row {
+      grid-template-columns: 70px 1fr 44px 22px;
+      grid-template-areas:
+        "tick name chev"
+        "bar bar bar"
+        "pct badges badges";
+      row-gap: 6px;
+    }
+    .m-ticker { grid-area: tick; }
+    .m-name { grid-area: name; }
+    .m-chev { grid-area: chev; }
+    .bar-cell { grid-area: bar; }
+    .m-pct { grid-area: pct; text-align: left; }
+    .m-badges { grid-area: badges; justify-content: flex-end; }
+    .detail-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 460px) {
+    .stats { grid-template-columns: 1fr; }
+    .mast-row { flex-direction: column; align-items: stretch; }
+    .actions { justify-content: space-between; }
+    .wrap { padding: 0 12px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <p class="kicker">Commitment of Traders · Legacy Futures & Options (Combined)</p>
+    <h1>COT Positioning <span class="amp">Dashboard</span></h1>
+    <p class="sub" id="subline">Loading ledger…</p>
+    <div class="mast-row">
+      <div class="statusline" id="statusline">
+        <span class="pill sample" id="sourcepill"><span class="dot"></span><span id="sourcepill-label">sample data</span></span>
+        <span id="reportdate">—</span>
+        <span id="marketcount"></span>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="refresh-btn"><span class="spin"></span><span class="lbl">Refresh live data</span></button>
+      </div>
+    </div>
+    <div class="banner" id="banner"></div>
+  </header>
+
+  <div class="legend">
+    <span class="item"><span class="sw long"></span> spec extreme long (pct &ge; 90)</span>
+    <span class="item"><span class="sw short"></span> spec extreme short (pct &le; 10)</span>
+    <span class="item"><span class="sw mid"></span> neutral spec (10 < pct < 90)</span>
+    <span class="item"><span class="sw cf"></span> confluence — spec & commercial extremes opposing</span>
+    <span class="item">bars = spec percentile · thin tick = commercial percentile</span>
+  </div>
+
+  <details class="howto" open>
+    <summary>How to read this dashboard</summary>
+    <div class="howto-body">
+      <p><b>What this is.</b> The weekly US <b>Commitment of Traders (COT)</b> report from the CFTC (released Fridays, ~3:30pm ET) for 41 markets across 6 sectors, using the <b>futures and options combined</b> report so options-inclusive positioning is included. It shows how <b>speculators</b> (momentum / trend traders) and <b>commercials</b> (producers / hedgers) are positioned, measured against each market&rsquo;s own trailing 3-year range.</p>
+
+      <h4>Key numbers</h4>
+      <ul>
+        <li><b>Percentile</b> (e.g. &ldquo;92nd&rdquo;) — where current spec positioning sits within that market&rsquo;s own 3-year history. <b>50th = typical</b>; higher = more long than usual; lower = more short than usual.</li>
+        <li><b>Extreme Long</b> = percentile &ge; 90. <b>Extreme Short</b> = percentile &le; 10.</li>
+        <li><b>The bar</b> shows the spec percentile, radiating from the 50th-percentile center line. The <b>thin tick</b> is the commercial percentile.</li>
+      </ul>
+
+      <h4>Signals to look for</h4>
+      <ul>
+        <li><span class="sw long"></span> <b>Amber / &ldquo;Ext Long&rdquo;</b> — speculators crowded long.</li>
+        <li><span class="sw short"></span> <b>Brick / &ldquo;Ext Short&rdquo;</b> — speculators crowded short.</li>
+        <li><span class="sw cf"></span> <b>Teal / &ldquo;Confluence&rdquo;</b> — specs <i>and</i> commercials are at opposite extremes. This is the classic contrarian watch: the crowd is crowded on one side while hedgers lean the other way. Worth investigating.</li>
+        <li><b>&#9650; / &#9660; + pp</b> — how much spec net positioning moved this week (in percentage points of open interest).</li>
+      </ul>
+
+      <h4>How to use it</h4>
+      <ul>
+        <li><b>Click any market</b> to expand its 3-year sparkline (spec vs commercial) and full stat breakdown.</li>
+        <li>Press <b>Refresh live data</b> to pull the latest CFTC report. Until a refresh succeeds, sample data (labeled) is shown.</li>
+        <li>The pill at the top tells you whether you are viewing <b>live</b> or <b>sample</b> data, and the <b>report date</b>.</li>
+      </ul>
+
+      <h4>Caveats</h4>
+      <ul>
+        <li><b>Descriptive, not a signal.</b> An extreme can persist through a long trend; this dashboard flags conditions to investigate, not trades to take.</li>
+        <li>Legacy-report &ldquo;commercial&rdquo; data in commodities blends true hedgers with swap dealers.</li>
+        <li>Percentiles require at least 52 weeks of history. A market showing no data usually means its registry code needs updating against the current CFTC report.</li>
+      </ul>
+    </div>
+  </details>
+
+  <main id="ledger" aria-live="polite"></main>
+
+  <footer>
+    Descriptive only — not a trading signal. Percentile/z-score use a trailing 156-week (3-year) window with a
+    minimum 52-week history; extremes are the 90th/10th percentiles of a market&rsquo;s own recent positioning.
+    CFTC Legacy futures-and-options combined report; commercial category in commodities blends hedgers with swap dealers.
+    Data from the CFTC Socrata API (dataset <code>srt6-5q2f</code>, filtered to Combined); sample data shown until a live refresh succeeds.
+  </footer>
+
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   MARKET REGISTRY — 41 markets · 6 sectors
+   ticker → CFTC Legacy (Futures & Options Combined) contract code → sector
+   NOTE: verify codes against the live CFTC report; codes can shift
+   over time. A stale code shows "no data" for that market only.
+   ===================================================================== */
+const MARKET_REGISTRY = [
+  // FX (9)
+  { ticker:'EUR', name:'Euro FX',             code:'099741', sector:'FX' },
+  { ticker:'GBP', name:'British Pound',       code:'096742', sector:'FX' },
+  { ticker:'JPY', name:'Japanese Yen',        code:'097741', sector:'FX' },
+  { ticker:'CHF', name:'Swiss Franc',         code:'092741', sector:'FX' },
+  { ticker:'CAD', name:'Canadian Dollar',     code:'090741', sector:'FX' },
+  { ticker:'AUD', name:'Australian Dollar',   code:'232741', sector:'FX' },
+  { ticker:'MXN', name:'Mexican Peso',        code:'095741', sector:'FX' },
+  { ticker:'BRL', name:'Brazilian Real',      code:'102741', sector:'FX' },
+  { ticker:'NZD', name:'New Zealand Dollar',  code:'112741', sector:'FX' },
+  // Rates (7)
+  { ticker:'TU',  name:'2-Year T-Note',       code:'042601', sector:'Rates' },
+  { ticker:'FV',  name:'5-Year T-Note',       code:'044601', sector:'Rates' },
+  { ticker:'TY',  name:'10-Year T-Note',      code:'043602', sector:'Rates' },
+  { ticker:'US',  name:'30-Year T-Bond',      code:'020601', sector:'Rates' },
+  { ticker:'UB',  name:'Ultra T-Bond',        code:'020604', sector:'Rates' },
+  { ticker:'FF',  name:'30-Day Federal Funds',code:'045601', sector:'Rates' },
+  { ticker:'SR3', name:'3-Month SOFR',        code:'134741', sector:'Rates' },
+  // Equities (5)
+  { ticker:'ES',  name:'E-mini S&P 500',      code:'13874A', sector:'Equities' },
+  { ticker:'NQ',  name:'NASDAQ-100 (Consol.)',code:'20974+', sector:'Equities' },
+  { ticker:'YM',  name:'E-mini Dow Jones',    code:'124603', sector:'Equities' },
+  { ticker:'RTY', name:'Russell 2000',        code:'239742', sector:'Equities' },
+  { ticker:'NKD', name:'Nikkei 225',          code:'240743', sector:'Equities' },
+  // Energy (5)
+  { ticker:'CL',  name:'WTI Crude Oil',       code:'067651', sector:'Energy' },
+  { ticker:'HO',  name:'ULSD Heating Oil',    code:'022651', sector:'Energy' },
+  { ticker:'RB',  name:'RBOB Gasoline',       code:'111659', sector:'Energy' },
+  { ticker:'NG',  name:'Natural Gas',         code:'023651', sector:'Energy' },
+  { ticker:'BZ',  name:'Brent (Last Day)',    code:'06765T', sector:'Energy' },
+  // Metals (5)
+  { ticker:'GC',  name:'Gold',                code:'088691', sector:'Metals' },
+  { ticker:'SI',  name:'Silver',              code:'084691', sector:'Metals' },
+  { ticker:'HG',  name:'Copper (COMEX)',      code:'085692', sector:'Metals' },
+  { ticker:'PL',  name:'Platinum',            code:'076651', sector:'Metals' },
+  { ticker:'PA',  name:'Palladium',           code:'075651', sector:'Metals' },
+  // Ag (10)
+  { ticker:'C',   name:'Corn',                code:'002602', sector:'Ag' },
+  { ticker:'S',   name:'Soybeans',            code:'005602', sector:'Ag' },
+  { ticker:'BO',  name:'Soybean Oil',         code:'007601', sector:'Ag' },
+  { ticker:'SM',  name:'Soybean Meal',        code:'026603', sector:'Ag' },
+  { ticker:'W',   name:'Chicago SRW Wheat',   code:'001602', sector:'Ag' },
+  { ticker:'KW',  name:'KC Hard Red Wheat',   code:'001612', sector:'Ag' },
+  { ticker:'CT',  name:'Cotton',              code:'033661', sector:'Ag' },
+  { ticker:'SB',  name:'Sugar #11 (World)',   code:'080732', sector:'Ag' },
+  { ticker:'KC',  name:'Coffee',              code:'083731', sector:'Ag' },
+  { ticker:'LC',  name:'Live Cattle',         code:'057642', sector:'Ag' },
+];
+
+const SECTOR_NAMES = {
+  FX:       'Foreign Exchange',
+  Rates:    'Interest Rates',
+  Equities: 'Equity Indices',
+  Energy:   'Energy',
+  Metals:   'Metals',
+  Ag:       'Agriculture',
+};
+
+const SECTOR_ORDER = ['FX', 'Rates', 'Equities', 'Energy', 'Metals', 'Ag'];
+
+// Legacy_All (srt6-5q2f) contains both FutOnly and Combined rows per market/date.
+// We use Combined (futures + options) so FX and every sector show full positioning.
+const CFTC_BASE = 'https://publicreporting.cftc.gov/resource/srt6-5q2f.json';
+const CFTC_REPORT = 'Combined'; // 'FutOnly' | 'Combined'
+const WINDOW = 156;          // 3-year rolling window (weeks)
+const MIN_HISTORY = 52;      // minimum weeks before a metric is produced
+const EXT_HI = 90;
+const EXT_LO = 10;
+const MAX_FETCH_ROWS = 50000;
+const MAX_RETRIES = 3;
+
+/* =====================================================================
+   Seeded PRNG + synthetic sample data generator
+   Produces ~4 years of weekly records per market, labeled as sample.
+   ===================================================================== */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function lastFriday(d) {
+  const x = new Date(d);
+  const day = x.getDay();           // 0 Sun .. 5 Fri
+  const diff = (day + 2) % 7;       // days back to Friday
+  x.setDate(x.getDate() - diff);
+  x.setHours(12, 0, 0, 0);
+  return x;
+}
+
+// Generate a weekly series of CFTC-style rows for one market.
+function genSampleSeries(meta, rng, nWeeks) {
+  const weeks = [];
+  const end = lastFriday(new Date());
+  // market personality
+  const specDrift    = (rng() - 0.5) * 0.0006;      // slow drift in net% 
+  const commDrift    = (rng() - 0.5) * 0.0004;
+  const specVol      = 0.004 + rng() * 0.012;
+  const commVol      = 0.004 + rng() * 0.010;
+  const baseOI       = 150000 + Math.floor(rng() * 2000000);
+  const oiGrowth     = 0.001 + rng() * 0.003;
+  const meanSpec     = (rng() - 0.5) * 0.10;        // baseline net% level
+  const meanComm     = -meanSpec * (0.6 + rng() * 0.8);
+
+  // regime shifts so a handful of markets reach extremes
+  const regimes = [];
+  const nRegimes = 1 + Math.floor(rng() * 3);
+  for (let i = 0; i < nRegimes; i++) {
+    regimes.push({ start: Math.floor(rng() * nWeeks * 0.8), level: (rng() - 0.5) * 0.24 });
+  }
+
+  let specNet = meanSpec, commNet = meanComm, oi = baseOI;
+  for (let i = 0; i < nWeeks; i++) {
+    for (const r of regimes) if (i === r.start) specNet = r.level;
+    specNet += specDrift + (rng() - 0.5) * 2 * specVol;
+    commNet += commDrift + (rng() - 0.5) * 2 * commVol;
+    commNet = -specNet * 0.55 + (commNet + specNet * 0.55) * 0.95 + (rng() - 0.5) * commVol * 0.4;
+    oi = oi * (1 + oiGrowth) * (0.98 + rng() * 0.04);
+
+    // clamp net positions to something plausible as % of OI
+    specNet = Math.max(-0.45, Math.min(0.45, specNet));
+    commNet = Math.max(-0.45, Math.min(0.45, commNet));
+
+    const d = new Date(end);
+    d.setDate(d.getDate() - (nWeeks - 1 - i) * 7);
+
+    // split into long/short contracts (long is base OI*share, short is remainder)
+    const specShare = 0.5 + specNet / 2;
+    const commShare = 0.5 + commNet / 2;
+    const specLong  = Math.round(oi * specShare * (0.10 + rng() * 0.12));
+    const specShort = Math.round(oi * (1 - specShare) * (0.10 + rng() * 0.12));
+    const commLong  = Math.round(oi * commShare * (0.14 + rng() * 0.12));
+    const commShort = Math.round(oi * (1 - commShare) * (0.14 + rng() * 0.12));
+
+    weeks.push({
+      date: d.toISOString().slice(0, 10),
+      oi: Math.round(oi),
+      specLong, specShort, commLong, commShort,
+    });
+  }
+  return weeks;
+}
+
+function buildSampleData() {
+  const byCode = {};
+  MARKET_REGISTRY.forEach((meta, idx) => {
+    const rng = mulberry32(0xC07 + idx * 7919);
+    byCode[meta.code] = { meta, weeks: genSampleSeries(meta, rng, 210) };
+  });
+  return byCode;
+}
+
+/* =====================================================================
+   METRIC ENGINE
+   Per market, per week (causal — trailing window only):
+     1. net position   = long − short (spec / commercial)
+     2. OI normalization = net ÷ open interest
+     3. rolling z      = (x − mean) / std, 156w window, min 52w
+     4. rolling percentile = rank of x within trailing 156w window
+     5. extreme        = pct ≥ 90 → Extreme Long · ≤ 10 → Extreme Short
+     6. confluence     = spec & commercial extremes in opposing directions
+     7. WoW change     = this week's net% − last week's, in pp
+   ===================================================================== */
+function computeMetrics(weeks) {
+  const n = weeks.length;
+  const out = new Array(n).fill(null);
+  // Raw net% per week (causal primitive — nothing from the future), kept in
+  // their OWN arrays. Previously the rolling pass wrote percentiles back into
+  // the same array it was ranking, so every subsequent 156-week window was a
+  // corrupt mix of raw net% and percentile values (and every market collapsed
+  // to the 0.6th percentile). Percentiles and z-scores are stored separately.
+  const specNetArr = new Array(n).fill(null);
+  const commNetArr = new Array(n).fill(null);
+  const specPctArr = new Array(n).fill(null);
+  const commPctArr = new Array(n).fill(null);
+  const specZArr   = new Array(n).fill(null);
+  const commZArr   = new Array(n).fill(null);
+
+  for (let i = 0; i < n; i++) {
+    const w = weeks[i];
+    const oi = w.oi > 0 ? w.oi : 1;
+    specNetArr[i] = (w.specLong - w.specShort) / oi;
+    commNetArr[i] = (w.commLong - w.commShort) / oi;
+  }
+
+  function percentileRank(winVals, current) {
+    // fraction of trailing-window values ≤ current, ×100
+    let count = 0;
+    for (const v of winVals) if (v <= current) count++;
+    return (count / winVals.length) * 100;
+  }
+  function zScore(winVals, current) {
+    let sum = 0;
+    for (const v of winVals) sum += v;
+    const mean = sum / winVals.length;
+    let ss = 0;
+    for (const v of winVals) { const d = v - mean; ss += d * d; }
+    const std = Math.sqrt(ss / winVals.length);
+    if (!std) return 0;
+    return (current - mean) / std;
+  }
+
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - WINDOW + 1);
+    const winLen = i - lo + 1;
+    if (winLen < MIN_HISTORY) continue;
+
+    const specWin = specNetArr.slice(lo, i + 1);
+    const commWin = commNetArr.slice(lo, i + 1);
+
+    specPctArr[i] = percentileRank(specWin, specNetArr[i]);
+    commPctArr[i] = percentileRank(commWin, commNetArr[i]);
+    specZArr[i]   = zScore(specWin, specNetArr[i]);
+    commZArr[i]   = zScore(commWin, commNetArr[i]);
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (specPctArr[i] === null) continue;
+    const w = weeks[i];
+    const oi = w.oi > 0 ? w.oi : 1;
+    const specNet = (w.specLong - w.specShort) / oi;
+    const commNet = (w.commLong - w.commShort) / oi;
+    const pSpec = specPctArr[i];
+    const pComm = commPctArr[i];
+    const sExt = pSpec >= EXT_HI ? 'L' : (pSpec <= EXT_LO ? 'S' : 'N');
+    const cExt = pComm >= EXT_HI ? 'L' : (pComm <= EXT_LO ? 'S' : 'N');
+    const confluence = (sExt === 'L' && cExt === 'S') || (sExt === 'S' && cExt === 'L');
+
+    const prev = i > 0 ? weeks[i - 1] : null;
+    const prevOI = prev && prev.oi > 0 ? prev.oi : null;
+    const specWoW = (prev && prevOI)
+      ? ((w.specLong - w.specShort) / oi - (prev.specLong - prev.specShort) / prevOI) * 100
+      : null;
+    const commWoW = (prev && prevOI)
+      ? ((w.commLong - w.commShort) / oi - (prev.commLong - prev.commShort) / prevOI) * 100
+      : null;
+
+    out[i] = {
+      date: w.date,
+      oi: w.oi,
+      specLong: w.specLong, specShort: w.specShort,
+      commLong: w.commLong, commShort: w.commShort,
+      specNetContracts: w.specLong - w.specShort,
+      commNetContracts: w.commLong - w.commShort,
+      specNetPct: specNet * 100,
+      commNetPct: commNet * 100,
+      specZ: specZArr[i],
+      commZ: commZArr[i],
+      specPct: pSpec,
+      commPct: pComm,
+      specExtreme: sExt,
+      commExtreme: cExt,
+      confluence,
+      specWoW,
+      commWoW,
+    };
+  }
+  return out;
+}
+
+/* =====================================================================
+   Data ingestion
+   ===================================================================== */
+function sortByDate(weeks) {
+  return weeks.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+// Convert live CFTC Socrata rows → per-market weeks.
+function rowsToWeeks(rows) {
+  const byCode = {};
+  for (const r of rows) {
+    const code = String(r.cftc_contract_market_code || '').trim();
+    const date = String(r.report_date_as_yyyy_mm_dd || '').slice(0, 10);
+    if (!code || !date) continue;
+    const oi = parseInt(r.open_interest_all, 10) || 0;
+    const rec = {
+      date,
+      oi,
+      specLong:  parseInt(r.noncomm_positions_long_all, 10)  || 0,
+      specShort: parseInt(r.noncomm_positions_short_all, 10) || 0,
+      commLong:  parseInt(r.comm_positions_long_all, 10)     || 0,
+      commShort: parseInt(r.comm_positions_short_all, 10)    || 0,
+    };
+    if (!byCode[code]) byCode[code] = {};
+    // CFTC publishes preliminary and final reports for the same date;
+    // prefer the row with the most complete OI (final usually matches).
+    const prev = byCode[code][date];
+    if (!prev || rec.oi > prev.oi) byCode[code][date] = rec;
+  }
+  const result = {};
+  for (const code of Object.keys(byCode)) {
+    const weeks = Object.values(byCode[code]);
+    result[code] = { weeks: sortByDate(weeks) };
+  }
+  return result;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function fetchLiveData() {
+  const codes = MARKET_REGISTRY.map(m => m.code);
+  // ~4 years back to build a full 156-week window
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 4);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const inClause = codes.map(c => `'${c}'`).join(',');
+  const where = `cftc_contract_market_code in (${inClause}) and report_date_as_yyyy_mm_dd >= '${cutoffStr}' and futonly_or_combined = '${CFTC_REPORT}'`;
+  const url = `${CFTC_BASE}?$where=${encodeURIComponent(where)}&$order=report_date_as_yyyy_mm_dd&$limit=${MAX_FETCH_ROWS}`;
+
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!resp.ok) throw new Error(`CFTC API responded ${resp.status}`);
+      const rows = await resp.json();
+      if (!Array.isArray(rows)) throw new Error('Unexpected CFTC response shape');
+      return rows;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_RETRIES) await sleep(700 * attempt); // backoff
+    }
+  }
+  throw lastErr || new Error('Live fetch failed');
+}
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+const state = {
+  byCode: {},      // code → { meta, weeks, metrics }
+  source: 'sample',
+  reportDate: null,
+  expanded: {},
+};
+
+function fmtNum(x, digits) {
+  if (x === null || x === undefined || !isFinite(x)) return '—';
+  return x.toLocaleString('en-US', { maximumFractionDigits: digits });
+}
+function fmtPct(x, digits) {
+  if (x === null || x === undefined || !isFinite(x)) return '—';
+  const s = x >= 0 ? '+' : '';
+  return s + x.toLocaleString('en-US', { maximumFractionDigits: digits });
+}
+function fmtContracts(x) {
+  if (x === null || x === undefined || !isFinite(x)) return '—';
+  const s = x >= 0 ? '+' : '';
+  return s + x.toLocaleString('en-US', { maximumIntegerDigits: 9 });
+}
+function extLabel(e) {
+  return e === 'L' ? 'Ext. Long' : e === 'S' ? 'Ext. Short' : 'Neutral';
+}
+
+function computeState(byCode, source, reportDate) {
+  state.byCode = byCode;
+  state.source = source;
+  state.reportDate = reportDate;
+  for (const code of Object.keys(byCode)) {
+    byCode[code].metrics = computeMetrics(sortByDate(byCode[code].weeks));
+  }
+}
+
+function latestMetrics(code) {
+  const m = state.byCode[code].metrics;
+  for (let i = m.length - 1; i >= 0; i--) {
+    if (m[i] !== null) return { metrics: m[i], index: i };
+  }
+  return { metrics: null, index: -1 };
+}
+
+function render() {
+  const ledger = document.getElementById('ledger');
+  ledger.innerHTML = '';
+  const frag = document.createDocumentFragment();
+
+  for (const sector of SECTOR_ORDER) {
+    const markets = MARKET_REGISTRY.filter(m => m.sector === sector);
+    const sec = document.createElement('section');
+    sec.className = 'sector';
+    sec.id = 'sector-' + sector.toLowerCase();
+
+    const head = document.createElement('div');
+    head.className = 'sector-head';
+    const h = document.createElement('h2');
+    h.textContent = sector;
+    const sub = document.createElement('span');
+    sub.className = 'sector-sub';
+    sub.textContent = SECTOR_NAMES[sector];
+    head.append(h, sub);
+    sec.appendChild(head);
+
+    // sort markets by spec percentile descending
+    markets.sort((a, b) => {
+      const la = latestMetrics(a.code).metrics;
+      const lb = latestMetrics(b.code).metrics;
+      return (lb ? lb.specPct : -1) - (la ? la.specPct : -1);
+    });
+
+    for (const meta of markets) {
+      sec.appendChild(renderMarket(meta));
+    }
+    frag.appendChild(sec);
+  }
+  ledger.appendChild(frag);
+  updateStatusline();
+}
+
+function renderMarket(meta) {
+  const { metrics, index } = latestMetrics(meta.code);
+  const isOpen = !!state.expanded[meta.code];
+
+  const el = document.createElement('div');
+  el.className = 'market';
+  el.dataset.code = meta.code;
+  if (metrics && metrics.confluence) el.classList.add('confluence');
+  if (isOpen) el.classList.add('open');
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.setAttribute('role', 'button');
+  row.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  row.setAttribute('tabindex', '0');
+
+  const ticker = document.createElement('span');
+  ticker.className = 'm-ticker';
+  ticker.textContent = meta.ticker;
+
+  const name = document.createElement('span');
+  name.className = 'm-name';
+  name.textContent = meta.name;
+  name.title = meta.name + ' · CFTC code ' + meta.code;
+
+  const barCell = document.createElement('div');
+  barCell.className = 'bar-cell';
+  barCell.appendChild(buildBar(meta, metrics));
+
+  const pctEl = document.createElement('span');
+  pctEl.className = 'm-pct';
+  if (metrics) {
+    pctEl.textContent = fmtNum(metrics.specPct, 0) + 'th';
+    pctEl.classList.add(metrics.specPct >= EXT_HI ? 'pct-long' : (metrics.specPct <= EXT_LO ? 'pct-short' : ''));
+  } else {
+    pctEl.textContent = '—';
+  }
+
+  const badges = document.createElement('div');
+  badges.className = 'm-badges';
+  if (metrics) {
+    if (metrics.specExtreme === 'L') badges.appendChild(badge('Ext Long', 'ext-long'));
+    if (metrics.specExtreme === 'S') badges.appendChild(badge('Ext Short', 'ext-short'));
+    if (metrics.confluence) badges.appendChild(badge('Confluence', 'cf'));
+    if (metrics.specWoW !== null) {
+      const up = metrics.specWoW >= 0;
+      badges.appendChild(badge(
+        (up ? '▲' : '▼') + fmtPct(metrics.specWoW, 2) + 'pp',
+        'wow ' + (up ? 'up' : 'down')
+      ));
+    }
+  }
+
+  const chev = document.createElement('span');
+  chev.className = 'm-chev';
+  chev.textContent = '›';
+
+  row.append(ticker, name, barCell, pctEl, badges, chev);
+  el.appendChild(row);
+
+  // detail
+  const detail = document.createElement('div');
+  detail.className = 'detail';
+  if (metrics && isOpen) {
+    detail.appendChild(buildDetail(meta, metrics, index));
+  }
+  el.appendChild(detail);
+
+  const toggle = () => {
+    state.expanded[meta.code] = !state.expanded[meta.code];
+    renderMarketDetail(el, meta);
+  };
+  row.addEventListener('click', toggle);
+  row.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+
+  return el;
+}
+
+function badge(text, cls) {
+  const b = document.createElement('span');
+  b.className = 'badge ' + cls;
+  b.textContent = text;
+  return b;
+}
+
+function buildBar(meta, m) {
+  const track = document.createElement('div');
+  track.className = 'track';
+  const ticks = [0, 10, 25, 50, 75, 90, 100];
+  for (const t of ticks) {
+    const r = document.createElement('div');
+    r.className = 'ruler' + (t === 50 ? ' mid' : (t === 10 || t === 90 ? ' tick' : ' tick'));
+    r.style.left = t + '%';
+    track.appendChild(r);
+    if (t === 10 || t === 50 || t === 90) {
+      const l = document.createElement('span');
+      l.className = 'ruler-label';
+      l.textContent = t;
+      l.style.left = t + '%';
+      track.appendChild(l);
+    }
+  }
+  if (!m) return track;
+
+  // diverging spec bar, radiating from the 50th-percentile center line
+  const half = 50;
+  const pct = Math.max(0, Math.min(100, m.specPct));
+  let left, width;
+  if (pct >= half) {
+    left = half;
+    width = (pct - half);
+  } else {
+    left = pct;
+    width = half - pct;
+  }
+  const bar = document.createElement('div');
+  bar.className = 'specbar';
+  bar.style.left = left + '%';
+  bar.style.width = width + '%';
+  if (m.specExtreme === 'L') bar.classList.add('ext-long');
+  else if (m.specExtreme === 'S') bar.classList.add('ext-short');
+  else bar.classList.add('off');
+  track.appendChild(bar);
+
+  // commercial percentile marker
+  const cm = document.createElement('div');
+  cm.className = 'comm-marker' + (m.confluence ? ' cf' : '');
+  cm.style.left = Math.max(0, Math.min(100, m.commPct)) + '%';
+  cm.title = 'Commercial percentile ' + fmtNum(m.commPct, 0);
+  track.appendChild(cm);
+
+  return track;
+}
+
+function buildDetail(meta, m, index) {
+  const wrap = document.createElement('div');
+  const grid = document.createElement('div');
+  grid.className = 'detail-grid';
+
+  // sparkline
+  const sparkCol = document.createElement('div');
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Net positioning · % of open interest (3y)';
+  sparkCol.appendChild(h3);
+  sparkCol.appendChild(buildSpark(meta.code, index));
+  const swl = document.createElement('div');
+  swl.className = 'sw-legend';
+  swl.innerHTML =
+    '<span class="item"><span class="sw" style="background:#D3A24C"></span>Speculators</span>' +
+    '<span class="item"><span class="sw" style="background:#5FAE9E"></span>Commercials</span>';
+  sparkCol.appendChild(swl);
+  grid.appendChild(sparkCol);
+
+  // stats
+  const statCol = document.createElement('div');
+  statCol.appendChild(buildStats(meta, m));
+  grid.appendChild(statCol);
+  wrap.appendChild(grid);
+
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.textContent = 'Percentiles are computed against each market\u2019s own trailing 156-week window (min 52 weeks). ' +
+    'Extremes are the 90th/10th percentiles. Confluence = spec extreme and commercial extreme in opposing directions. ' +
+    'Week-over-week change is in percentage points of open interest, independent of historical range.';
+  wrap.appendChild(note);
+  return wrap;
+}
+
+function buildStats(meta, m) {
+  const stats = document.createElement('div');
+  stats.className = 'stats';
+
+  const items = [
+    ['Report date', fmtNum ? m.date : m.date, ''],
+    ['Open interest', fmtContracts(m.oi), 'contracts'],
+    ['Spec net', fmtContracts(m.specNetContracts), fmtPct(m.specNetPct, 2) + '% OI'],
+    ['Comm net', fmtContracts(m.commNetContracts), fmtPct(m.commNetPct, 2) + '% OI'],
+    ['Spec percentile', fmtNum(m.specPct, 0) + 'th', extLabel(m.specExtreme)],
+    ['Comm percentile', fmtNum(m.commPct, 0) + 'th', extLabel(m.commExtreme)],
+    ['Spec z-score', fmtNum(m.specZ, 2), m.specExtreme === 'L' ? 'extreme long' : m.specExtreme === 'S' ? 'extreme short' : 'neutral'],
+    ['Comm z-score', fmtNum(m.commZ, 2), m.commExtreme === 'L' ? 'extreme long' : m.commExtreme === 'S' ? 'extreme short' : 'neutral'],
+    ['Spec WoW', fmtPct(m.specWoW, 2) + 'pp', 'of open interest'],
+    ['Comm WoW', fmtPct(m.commWoW, 2) + 'pp', 'of open interest'],
+    ['Spec position', fmtNum(m.specNetPct, 2) + '%', 'of open interest'],
+    ['Comm position', fmtNum(m.commNetPct, 2) + '%', 'of open interest'],
+  ];
+  for (const [k, v, sub] of items) {
+    const st = document.createElement('div');
+    st.className = 'stat';
+    const kEl = document.createElement('div');
+    kEl.className = 'k';
+    kEl.textContent = k;
+    const vEl = document.createElement('div');
+    vEl.className = 'v';
+    let cls = 'neut';
+    if (typeof v === 'string') {
+      if (v.indexOf('+') === 0) cls = 'pos';
+      else if (v.indexOf('-') === 0) cls = 'neg';
+    }
+    if (k === 'Confluence') cls = 'cf';
+    vEl.classList.add(cls);
+    vEl.textContent = v;
+    st.appendChild(kEl);
+    st.appendChild(vEl);
+    if (sub) {
+      const subEl = document.createElement('div');
+      subEl.className = 'subv';
+      subEl.textContent = sub;
+      st.appendChild(subEl);
+    }
+    stats.appendChild(st);
+  }
+  return stats;
+}
+
+function buildSpark(code, index) {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const W = 560, H = 150, PAD = 26, PR = 8;
+  const metrics = state.byCode[code].metrics;
+  // last 156 points ending at index
+  const lo = Math.max(0, index - WINDOW + 1);
+  const slice = metrics.slice(lo, index + 1).filter(m => m !== null);
+  if (slice.length < 2) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = 'Insufficient history for sparkline.';
+    return p;
+  }
+  const spec = slice.map(m => m.specNetPct);
+  const comm = slice.map(m => m.commNetPct);
+  let mn = Math.min(...spec, ...comm, 0);
+  let mx = Math.max(...spec, ...comm, 0);
+  const range = (mx - mn) || 1;
+  mn -= range * 0.05; mx += range * 0.05;
+
+  const x = i => PAD + (i / (slice.length - 1)) * (W - PAD * 2);
+  const y = v => H - PR - ((v - mn) / (mx - mn)) * (H - PR * 2 - 8);
+
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Sparkline of spec and commercial net positioning');
+
+  // zero line
+  const zl = document.createElementNS(svgNS, 'line');
+  zl.setAttribute('x1', PAD); zl.setAttribute('x2', W - PAD);
+  zl.setAttribute('y1', y(0)); zl.setAttribute('y2', y(0));
+  zl.setAttribute('stroke', '#2C3B4A'); zl.setAttribute('stroke-width', '1');
+  svg.appendChild(zl);
+
+  // percentile grid (0/25/50/75/100)
+  [0, 50, 100].forEach(t => {
+    const g = document.createElementNS(svgNS, 'line');
+    g.setAttribute('x1', PAD); g.setAttribute('x2', W - PAD);
+    g.setAttribute('y1', y(t)); g.setAttribute('y2', y(t));
+    g.setAttribute('stroke', '#22303E'); g.setAttribute('stroke-width', '0.75');
+    svg.appendChild(g);
+  });
+
+  function line(data, color, width) {
+    let d = '';
+    for (let i = 0; i < data.length; i++) {
+      d += (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(data[i]).toFixed(1);
+    }
+    const p = document.createElementNS(svgNS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', color);
+    p.setAttribute('stroke-width', width);
+    p.setAttribute('stroke-linejoin', 'round');
+    return p;
+  }
+
+  svg.appendChild(line(comm, '#5FAE9E', 1.2));
+  svg.appendChild(line(spec, '#D3A24C', 1.6));
+
+  // labels
+  const ylab = v => {
+    const t = document.createElementNS(svgNS, 'text');
+    t.setAttribute('x', W - PAD); t.setAttribute('y', y(v) - 3);
+    t.setAttribute('fill', '#5E6E7E'); t.setAttribute('font-size', '9');
+    t.setAttribute('font-family', 'IBM Plex Mono, monospace');
+    t.setAttribute('text-anchor', 'end');
+    t.textContent = (v * 1).toFixed(1) + '%';
+    svg.appendChild(t);
+  };
+  ylab(mn); ylab(0); ylab(mx);
+
+  return svg;
+}
+
+function updateMarketDetail(el, meta) {
+  const { metrics, index } = latestMetrics(meta.code);
+  const isOpen = !!state.expanded[meta.code];
+  el.classList.toggle('open', isOpen);
+  const rowBtn = el.querySelector('.row');
+  if (rowBtn) rowBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  let detail = el.querySelector('.detail');
+  if (!detail) {
+    detail = document.createElement('div');
+    detail.className = 'detail';
+    el.appendChild(detail);
+  }
+  detail.innerHTML = '';
+  if (isOpen && metrics) detail.appendChild(buildDetail(meta, metrics, index));
+}
+
+function renderMarketDetail(el, meta) {
+  updateMarketDetail(el, meta);
+  // re-sort row position? Keep stable; simpler: update badges/bar in place.
+  const rowBtn = el.querySelector('.row');
+  // cheapest correct refresh: rebuild the whole row visuals via re-render of this market only
+  const fresh = renderMarket(meta);
+  el.replaceWith(fresh);
+}
+
+function updateStatusline() {
+  const sub = document.getElementById('subline');
+  const pill = document.getElementById('sourcepill');
+  const label = document.getElementById('sourcepill-label');
+  const dateEl = document.getElementById('reportdate');
+  const countEl = document.getElementById('marketcount');
+
+  if (state.source === 'live') {
+    pill.classList.remove('sample');
+    pill.classList.add('live');
+    label.textContent = 'live CFTC data';
+  } else {
+    pill.classList.add('sample');
+    pill.classList.remove('live');
+    label.textContent = 'sample data';
+  }
+  dateEl.textContent = state.reportDate ? 'report: ' + state.reportDate : 'report: —';
+  const n = MARKET_REGISTRY.length;
+  countEl.textContent = n + ' markets · ' + SECTOR_ORDER.length + ' sectors';
+  sub.textContent = state.source === 'live'
+    ? 'Live data from CFTC Legacy futures & options combined report · refreshed on demand'
+    : 'Sample data loaded (offline-friendly) — press Refresh for live CFTC data';
+}
+
+/* =====================================================================
+   Live refresh flow
+   ===================================================================== */
+function showBanner(msg, withRetry) {
+  const b = document.getElementById('banner');
+  b.innerHTML = '';
+  b.classList.add('show');
+  const t = document.createElement('span');
+  t.textContent = msg;
+  b.appendChild(t);
+  if (withRetry) {
+    const r = document.createElement('span');
+    r.className = 'retry';
+    r.textContent = 'Retry';
+    r.addEventListener('click', refresh);
+    b.appendChild(r);
+  }
+}
+function hideBanner() {
+  document.getElementById('banner').classList.remove('show');
+}
+
+async function refresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  hideBanner();
+  try {
+    const rows = await fetchLiveData();
+    const byCode = rowsToWeeks(rows);
+    // keep only codes we know; others (stale/unknown codes) are dropped
+    const known = {};
+    let got = 0;
+    for (const meta of MARKET_REGISTRY) {
+      const w = byCode[meta.code];
+      if (w && w.weeks.length >= MIN_HISTORY) {
+        known[meta.code] = { meta, weeks: w.weeks };
+        got++;
+      }
+    }
+    if (got === 0) {
+      throw new Error('Live fetch returned no usable data for any known market code.');
+    }
+    const reportDate = latestReportDate(known);
+    computeState(known, 'live', reportDate);
+    state.expanded = {};
+    render();
+    if (got < MARKET_REGISTRY.length) {
+      showBanner(
+        'Loaded live data for ' + got + ' of ' + MARKET_REGISTRY.length +
+        ' markets. Some registry codes may be stale — check the market registry against the current CFTC report.',
+        false
+      );
+    }
+  } catch (err) {
+    showBanner('Could not refresh live data — ' + (err && err.message ? err.message : 'network error') +
+      '. Showing last-good (sample) data.', true);
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function latestReportDate(byCode) {
+  let latest = null;
+  for (const code of Object.keys(byCode)) {
+    const m = byCode[code].metrics;
+    for (let i = m.length - 1; i >= 0; i--) {
+      if (m[i]) { if (!latest || m[i].date > latest) latest = m[i].date; break; }
+    }
+  }
+  return latest;
+}
+
+/* =====================================================================
+   Init
+   ===================================================================== */
+function init() {
+  const sample = buildSampleData();
+  const byCode = {};
+  for (const meta of MARKET_REGISTRY) {
+    byCode[meta.code] = { meta, weeks: sample[meta.code].weeks };
+  }
+  const reportDate = latestReportDate(byCode);
+  computeState(byCode, 'sample', reportDate);
+  render();
+
+  document.getElementById('refresh-btn').addEventListener('click', refresh);
+
+  // try a live refresh once automatically, silently
+  refresh().catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
