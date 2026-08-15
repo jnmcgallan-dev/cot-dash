@@ -1025,7 +1025,8 @@ function renderMarket(meta) {
   pctEl.className = 'm-pct';
   if (metrics) {
     pctEl.textContent = fmtNum(metrics.specPct, 0) + 'th';
-    pctEl.classList.add(metrics.specPct >= EXT_HI ? 'pct-long' : (metrics.specPct <= EXT_LO ? 'pct-short' : ''));
+    const pctCls = metrics.specPct >= EXT_HI ? 'pct-long' : (metrics.specPct <= EXT_LO ? 'pct-short' : '');
+    if (pctCls) pctEl.classList.add(pctCls);
   } else {
     pctEl.textContent = '—';
   }
@@ -1377,8 +1378,9 @@ async function refresh() {
     if (got === 0) {
       throw new Error('Live fetch returned no usable data for any known market code.');
     }
+    computeState(known, 'live', null);
     const reportDate = latestReportDate(known);
-    computeState(known, 'live', reportDate);
+    state.reportDate = reportDate;
     state.expanded = {};
     render();
     if (got < MARKET_REGISTRY.length) {
@@ -1417,8 +1419,8 @@ function init() {
   for (const meta of MARKET_REGISTRY) {
     byCode[meta.code] = { meta, weeks: sample[meta.code].weeks };
   }
-  const reportDate = latestReportDate(byCode);
-  computeState(byCode, 'sample', reportDate);
+  computeState(byCode, 'sample', null);
+  state.reportDate = latestReportDate(byCode);
   render();
 
   document.getElementById('refresh-btn').addEventListener('click', refresh);
