@@ -253,6 +253,14 @@
     letter-spacing: 0.05em;
     white-space: nowrap;
   }
+  .spotlight-card .sc-name {
+    font-size: 10.5px;
+    color: var(--paper-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
   .spotlight-card .sc-pctile {
     font-family: var(--mono);
     font-size: 15px;
@@ -300,7 +308,30 @@
   .strength-sub {
     font-size: 11.5px;
     color: var(--paper-faint);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
+  }
+  .strength-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .strength-tab {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--paper-dim);
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .strength-tab:hover { background: var(--panel-2); }
+  .strength-tab.active {
+    color: var(--bg);
+    background: var(--long);
+    border-color: var(--long);
   }
   .strength-cols {
     display: grid;
@@ -321,10 +352,10 @@
   }
   .strength-row {
     display: grid;
-    grid-template-columns: 20px 46px 1fr 40px;
+    grid-template-columns: 20px 1fr 40px;
     align-items: center;
     gap: 8px;
-    padding: 5px 0;
+    padding: 6px 0;
     cursor: pointer;
     border-radius: 3px;
   }
@@ -334,11 +365,26 @@
     font-size: 10px;
     color: var(--paper-faint);
   }
+  .strength-main { min-width: 0; }
+  .strength-label {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
   .strength-ticker {
     font-family: var(--mono);
     font-size: 12.5px;
     font-weight: 500;
     color: var(--paper);
+    flex-shrink: 0;
+  }
+  .strength-name {
+    font-size: 10.5px;
+    color: var(--paper-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .strength-bar-track {
     position: relative;
@@ -727,8 +773,9 @@
   </div>
 
   <div class="strength" id="strength">
-    <div class="strength-head"><span class="title">FX Strength</span></div>
-    <div class="strength-sub">The 9 FX markets ranked by spec positioning — most crowded long (&ldquo;strongest&rdquo;) to most crowded short (&ldquo;weakest&rdquo;), each vs USD. Widest spreads below are the biggest positioning gaps between two currencies — a derived read, not a quoted pair. Click a ticker to jump to it.</div>
+    <div class="strength-head"><span class="title" id="strength-title">FX Strength</span></div>
+    <div class="strength-sub" id="strength-sub"></div>
+    <div class="strength-tabs" id="strength-tabs"></div>
     <div class="strength-cols">
       <div>
         <div class="strength-col-label">Ranking</div>
@@ -1145,6 +1192,7 @@ const state = {
   source: 'sample',
   reportDate: null,
   expanded: {},
+  strengthSector: 'FX',
 };
 
 function fmtNum(x, digits) {
@@ -1218,7 +1266,7 @@ function render() {
   ledger.appendChild(frag);
   updateStatusline();
   renderSpotlight();
-  renderFxStrength();
+  renderStrength();
 }
 
 function fxBucketClass(pct) {
@@ -1234,33 +1282,59 @@ function fxBucketLabel(pct) {
   return 'Crowded short';
 }
 
-function renderFxStrength() {
+function renderStrengthTabs() {
+  const tabsEl = document.getElementById('strength-tabs');
+  tabsEl.innerHTML = '';
+  for (const sector of SECTOR_ORDER) {
+    const tab = document.createElement('span');
+    tab.className = 'strength-tab' + (sector === state.strengthSector ? ' active' : '');
+    tab.textContent = sector;
+    tab.addEventListener('click', () => {
+      state.strengthSector = sector;
+      renderStrength();
+    });
+    tabsEl.appendChild(tab);
+  }
+}
+
+function renderStrength() {
+  renderStrengthTabs();
+
+  const sector = state.strengthSector;
+  const titleEl = document.getElementById('strength-title');
+  const subEl = document.getElementById('strength-sub');
   const listEl = document.getElementById('strength-list');
   const spreadEl = document.getElementById('strength-spreads');
   if (!listEl || !spreadEl) return;
   listEl.innerHTML = '';
   spreadEl.innerHTML = '';
 
-  const fx = MARKET_REGISTRY
-    .filter(m => m.sector === 'FX')
+  titleEl.textContent = sector + ' Strength';
+  const vsClause = sector === 'FX' ? ', each vs USD' : '';
+  subEl.textContent = `Markets in ${SECTOR_NAMES[sector]} ranked by spec positioning — most crowded long ("strongest") to most crowded short ("weakest")${vsClause}. Widest spreads below are the biggest positioning gaps between two markets — a derived read, not a quoted pair. Click a ticker to jump to it.`;
+
+  const group = MARKET_REGISTRY
+    .filter(m => m.sector === sector)
     .map(meta => ({ meta, metrics: latestMetrics(meta.code).metrics }))
     .filter(r => r.metrics)
     .sort((a, b) => b.metrics.specPct - a.metrics.specPct);
 
-  if (fx.length === 0) {
-    listEl.innerHTML = '<div class="spotlight-empty">No FX data yet.</div>';
+  if (group.length === 0) {
+    listEl.innerHTML = '<div class="spotlight-empty">No data yet.</div>';
     return;
   }
 
-  fx.forEach((r, i) => {
+  group.forEach((r, i) => {
     const pct = r.metrics.specPct;
     const cls = fxBucketClass(pct);
     const row = document.createElement('div');
     row.className = 'strength-row';
     row.innerHTML = `
       <span class="strength-rank">${i + 1}</span>
-      <span class="strength-ticker">${r.meta.ticker}</span>
-      <span class="strength-bar-track"><span class="strength-bar-fill ${cls}" style="width:${pct}%"></span></span>
+      <span class="strength-main">
+        <span class="strength-label"><span class="strength-ticker">${r.meta.ticker}</span><span class="strength-name">${r.meta.name}</span></span>
+        <span class="strength-bar-track"><span class="strength-bar-fill ${cls}" style="width:${pct}%"></span></span>
+      </span>
       <span class="strength-pct">${fmtNum(pct, 0)}th</span>
     `;
     row.title = r.meta.name + ' — ' + fxBucketLabel(pct);
@@ -1269,20 +1343,23 @@ function renderFxStrength() {
   });
 
   const pairs = [];
-  for (let i = 0; i < fx.length; i++) {
-    for (let j = i + 1; j < fx.length; j++) {
-      pairs.push({ strong: fx[i], weak: fx[j], spread: fx[i].metrics.specPct - fx[j].metrics.specPct });
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      pairs.push({ strong: group[i], weak: group[j], spread: group[i].metrics.specPct - group[j].metrics.specPct });
     }
   }
   pairs.sort((a, b) => b.spread - a.spread);
 
+  if (pairs.length === 0) {
+    spreadEl.innerHTML = '<div class="spotlight-empty">Need at least 2 markets to compare.</div>';
+  }
   for (const p of pairs.slice(0, 5)) {
     const row = document.createElement('div');
     row.className = 'spread-row';
     row.innerHTML = `
-      <span class="spread-chip long">${p.strong.meta.ticker}</span>
+      <span class="spread-chip long" title="${p.strong.meta.name}">${p.strong.meta.ticker}</span>
       <span class="spread-arrow">&rarr;</span>
-      <span class="spread-chip short">${p.weak.meta.ticker}</span>
+      <span class="spread-chip short" title="${p.weak.meta.name}">${p.weak.meta.ticker}</span>
       <span class="spread-val">${fmtNum(p.spread, 0)}pp</span>
     `;
     const chips = row.querySelectorAll('.spread-chip');
@@ -1317,6 +1394,7 @@ function renderSpotlight() {
         <span class="sc-ticker">${meta.ticker}</span>
         <span class="sc-sector">${meta.sector}</span>
       </div>
+      <div class="sc-name">${meta.name}</div>
       <div class="sc-pctile">${fmtNum(metrics.specPct, 1)}</div>
       <div class="sc-label">${metrics.specExtreme === 'L' ? 'Ext Long' : 'Ext Short'}</div>
     `;
