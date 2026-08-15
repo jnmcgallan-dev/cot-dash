@@ -190,6 +190,95 @@
   .sw.cf    { background: var(--confluence); }
   .sw.mid   { background: var(--steel); }
 
+  /* ---------- Spotlight ---------- */
+  .spotlight {
+    margin: 22px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .spotlight-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 3px;
+  }
+  .spotlight-head .title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--paper);
+  }
+  .spotlight-sub {
+    font-size: 11.5px;
+    color: var(--paper-faint);
+    margin-bottom: 14px;
+  }
+  .spotlight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    padding-bottom: 16px;
+  }
+  .spotlight-card {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--steel);
+    border-radius: 4px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color .15s ease, transform .15s ease, background .15s ease;
+  }
+  .spotlight-card:hover { background: var(--panel-2); transform: translateY(-1px); }
+  .spotlight-card.long  { border-left-color: var(--long); }
+  .spotlight-card.short { border-left-color: var(--short); }
+  .spotlight-card .sc-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 5px;
+    padding-right: 14px;
+  }
+  .spotlight-card .sc-ticker {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--paper);
+  }
+  .spotlight-card .sc-sector {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--paper-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .spotlight-card .sc-pctile {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .spotlight-card.long .sc-pctile  { color: var(--long); }
+  .spotlight-card.short .sc-pctile { color: var(--short); }
+  .spotlight-card .sc-label {
+    font-size: 9.5px;
+    color: var(--paper-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .spotlight-card .sc-cf {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--confluence);
+    font-size: 12px;
+  }
+  .spotlight-empty {
+    font-size: 12.5px;
+    color: var(--paper-faint);
+    padding: 4px 0 16px;
+  }
+
   /* ---------- How-to-read panel ---------- */
   .howto {
     margin: 18px 0 0;
@@ -521,6 +610,12 @@
     <span class="item"><span class="sw mid"></span> neutral spec (10 < pct < 90)</span>
     <span class="item"><span class="sw cf"></span> confluence — spec & commercial extremes opposing</span>
     <span class="item">bars = spec percentile · thin tick = commercial percentile</span>
+  </div>
+
+  <div class="spotlight" id="spotlight">
+    <div class="spotlight-head"><span class="title">Spotlight</span></div>
+    <div class="spotlight-sub">Markets currently at a 3-year positioning extreme, most crowded first — click a card to jump to it below.</div>
+    <div class="spotlight-grid" id="spotlight-grid"></div>
   </div>
 
   <details class="howto" open>
@@ -990,6 +1085,49 @@ function render() {
   }
   ledger.appendChild(frag);
   updateStatusline();
+  renderSpotlight();
+}
+
+function renderSpotlight() {
+  const grid = document.getElementById('spotlight-grid');
+  grid.innerHTML = '';
+
+  const extremes = MARKET_REGISTRY
+    .map(meta => ({ meta, metrics: latestMetrics(meta.code).metrics }))
+    .filter(r => r.metrics && (r.metrics.specExtreme === 'L' || r.metrics.specExtreme === 'S'))
+    .sort((a, b) => Math.abs(b.metrics.specPct - 50) - Math.abs(a.metrics.specPct - 50))
+    .slice(0, 12);
+
+  if (extremes.length === 0) {
+    grid.innerHTML = '<div class="spotlight-empty">No markets are currently at a 3-year positioning extreme.</div>';
+    return;
+  }
+
+  for (const { meta, metrics } of extremes) {
+    const cls = metrics.specExtreme === 'L' ? 'long' : 'short';
+    const card = document.createElement('div');
+    card.className = 'spotlight-card ' + cls;
+    card.innerHTML = `
+      ${metrics.confluence ? '<span class="sc-cf">&#9670;</span>' : ''}
+      <div class="sc-top">
+        <span class="sc-ticker">${meta.ticker}</span>
+        <span class="sc-sector">${meta.sector}</span>
+      </div>
+      <div class="sc-pctile">${fmtNum(metrics.specPct, 1)}</div>
+      <div class="sc-label">${metrics.specExtreme === 'L' ? 'Ext Long' : 'Ext Short'}</div>
+    `;
+    card.addEventListener('click', () => jumpToMarket(meta.code));
+    grid.appendChild(card);
+  }
+}
+
+function jumpToMarket(code) {
+  const el = document.querySelector('.market[data-code="' + code + '"]');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!el.classList.contains('open')) {
+    setTimeout(() => el.querySelector('.row').click(), 350);
+  }
 }
 
 function renderMarket(meta) {
