@@ -279,6 +279,114 @@
     padding: 4px 0 16px;
   }
 
+  /* ---------- FX Strength ---------- */
+  .strength {
+    margin: 22px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .strength-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 3px;
+  }
+  .strength-head .title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--paper);
+  }
+  .strength-sub {
+    font-size: 11.5px;
+    color: var(--paper-faint);
+    margin-bottom: 14px;
+  }
+  .strength-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding-bottom: 16px;
+  }
+  @media (max-width: 720px) {
+    .strength-cols { grid-template-columns: 1fr; }
+  }
+  .strength-col-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+    margin-bottom: 8px;
+  }
+  .strength-row {
+    display: grid;
+    grid-template-columns: 20px 46px 1fr 40px;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .strength-row:hover { background: var(--panel-2); }
+  .strength-rank {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--paper-faint);
+  }
+  .strength-ticker {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--paper);
+  }
+  .strength-bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--steel-2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .strength-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px; }
+  .strength-bar-fill.long  { background: var(--long); }
+  .strength-bar-fill.short { background: var(--short); }
+  .strength-bar-fill.mid   { background: var(--steel); }
+  .strength-pct {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-align: right;
+    color: var(--paper-dim);
+  }
+  .strength-spreads { margin-top: 4px; }
+  .spread-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    border-top: 1px solid var(--hairline);
+  }
+  .spread-row:first-child { border-top: none; }
+  .spread-chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .spread-chip.long  { color: var(--long);  border-color: var(--long); }
+  .spread-chip.short { color: var(--short); border-color: var(--short); }
+  .spread-chip:hover { background: var(--panel-2); }
+  .spread-arrow { color: var(--paper-faint); font-size: 11px; }
+  .spread-val {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--paper-faint);
+  }
+
   /* ---------- How-to-read panel ---------- */
   .howto {
     margin: 18px 0 0;
@@ -616,6 +724,21 @@
     <div class="spotlight-head"><span class="title">Spotlight</span></div>
     <div class="spotlight-sub">Markets currently at a 3-year positioning extreme, most crowded first — click a card to jump to it below.</div>
     <div class="spotlight-grid" id="spotlight-grid"></div>
+  </div>
+
+  <div class="strength" id="strength">
+    <div class="strength-head"><span class="title">FX Strength</span></div>
+    <div class="strength-sub">The 9 FX markets ranked by spec positioning — most crowded long (&ldquo;strongest&rdquo;) to most crowded short (&ldquo;weakest&rdquo;), each vs USD. Widest spreads below are the biggest positioning gaps between two currencies — a derived read, not a quoted pair. Click a ticker to jump to it.</div>
+    <div class="strength-cols">
+      <div>
+        <div class="strength-col-label">Ranking</div>
+        <div id="strength-list"></div>
+      </div>
+      <div>
+        <div class="strength-col-label">Widest positioning spreads</div>
+        <div class="strength-spreads" id="strength-spreads"></div>
+      </div>
+    </div>
   </div>
 
   <details class="howto" open>
@@ -1095,6 +1218,78 @@ function render() {
   ledger.appendChild(frag);
   updateStatusline();
   renderSpotlight();
+  renderFxStrength();
+}
+
+function fxBucketClass(pct) {
+  if (pct >= 60) return 'long';
+  if (pct <= 40) return 'short';
+  return 'mid';
+}
+function fxBucketLabel(pct) {
+  if (pct >= 90) return 'Crowded long';
+  if (pct >= 60) return 'Long-leaning';
+  if (pct > 40) return 'Neutral';
+  if (pct > 10) return 'Short-leaning';
+  return 'Crowded short';
+}
+
+function renderFxStrength() {
+  const listEl = document.getElementById('strength-list');
+  const spreadEl = document.getElementById('strength-spreads');
+  if (!listEl || !spreadEl) return;
+  listEl.innerHTML = '';
+  spreadEl.innerHTML = '';
+
+  const fx = MARKET_REGISTRY
+    .filter(m => m.sector === 'FX')
+    .map(meta => ({ meta, metrics: latestMetrics(meta.code).metrics }))
+    .filter(r => r.metrics)
+    .sort((a, b) => b.metrics.specPct - a.metrics.specPct);
+
+  if (fx.length === 0) {
+    listEl.innerHTML = '<div class="spotlight-empty">No FX data yet.</div>';
+    return;
+  }
+
+  fx.forEach((r, i) => {
+    const pct = r.metrics.specPct;
+    const cls = fxBucketClass(pct);
+    const row = document.createElement('div');
+    row.className = 'strength-row';
+    row.innerHTML = `
+      <span class="strength-rank">${i + 1}</span>
+      <span class="strength-ticker">${r.meta.ticker}</span>
+      <span class="strength-bar-track"><span class="strength-bar-fill ${cls}" style="width:${pct}%"></span></span>
+      <span class="strength-pct">${fmtNum(pct, 0)}th</span>
+    `;
+    row.title = r.meta.name + ' — ' + fxBucketLabel(pct);
+    row.addEventListener('click', () => jumpToMarket(r.meta.code));
+    listEl.appendChild(row);
+  });
+
+  const pairs = [];
+  for (let i = 0; i < fx.length; i++) {
+    for (let j = i + 1; j < fx.length; j++) {
+      pairs.push({ strong: fx[i], weak: fx[j], spread: fx[i].metrics.specPct - fx[j].metrics.specPct });
+    }
+  }
+  pairs.sort((a, b) => b.spread - a.spread);
+
+  for (const p of pairs.slice(0, 5)) {
+    const row = document.createElement('div');
+    row.className = 'spread-row';
+    row.innerHTML = `
+      <span class="spread-chip long">${p.strong.meta.ticker}</span>
+      <span class="spread-arrow">&rarr;</span>
+      <span class="spread-chip short">${p.weak.meta.ticker}</span>
+      <span class="spread-val">${fmtNum(p.spread, 0)}pp</span>
+    `;
+    const chips = row.querySelectorAll('.spread-chip');
+    chips[0].addEventListener('click', e => { e.stopPropagation(); jumpToMarket(p.strong.meta.code); });
+    chips[1].addEventListener('click', e => { e.stopPropagation(); jumpToMarket(p.weak.meta.code); });
+    spreadEl.appendChild(row);
+  }
 }
 
 function renderSpotlight() {
