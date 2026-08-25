@@ -797,6 +797,7 @@
       <ul>
         <li><b>Speculators</b> — traders betting on price direction (hedge funds, trend-followers, retail). They don&rsquo;t use the underlying commodity or currency — they&rsquo;re purely trying to profit from the move.</li>
         <li><b>Commercials</b> — businesses with real exposure to the asset (an airline hedging fuel costs, an exporter hedging currency risk). They trade to reduce risk, not to speculate.</li>
+        <li><b>Non-reportable</b> — traders below the CFTC&rsquo;s reporting threshold, mostly small speculators. Shown for context; it isn&rsquo;t part of the confluence signal below (that&rsquo;s specifically the spec-vs-hedger contrarian setup).</li>
         <li><b>Open interest</b> — the total number of futures contracts currently open. It&rsquo;s the &ldquo;size of the pool&rdquo; that positions are measured against.</li>
         <li><b>Net position</b> — long contracts minus short contracts for a group. Positive = net long, negative = net short.</li>
         <li><b>Percentile</b> — where today&rsquo;s net position ranks against the same market&rsquo;s last 3 years of weekly readings. 90th percentile means more crowded (long or short) than 90% of the last 3 years.</li>
@@ -961,6 +962,11 @@ function genSampleSeries(meta, rng, nWeeks) {
   const oiGrowth     = 0.001 + rng() * 0.003;
   const meanSpec     = (rng() - 0.5) * 0.10;        // baseline net% level
   const meanComm     = -meanSpec * (0.6 + rng() * 0.8);
+  // Non-reportable (small traders below CFTC reporting thresholds) — smaller,
+  // noisier, and largely independent of the spec/comm tug-of-war.
+  const nonreptDrift = (rng() - 0.5) * 0.0003;
+  const nonreptVol   = 0.002 + rng() * 0.006;
+  const meanNonrept  = (rng() - 0.5) * 0.05;
 
   // regime shifts so a handful of markets reach extremes
   const regimes = [];
@@ -969,17 +975,19 @@ function genSampleSeries(meta, rng, nWeeks) {
     regimes.push({ start: Math.floor(rng() * nWeeks * 0.8), level: (rng() - 0.5) * 0.24 });
   }
 
-  let specNet = meanSpec, commNet = meanComm, oi = baseOI;
+  let specNet = meanSpec, commNet = meanComm, nonreptNet = meanNonrept, oi = baseOI;
   for (let i = 0; i < nWeeks; i++) {
     for (const r of regimes) if (i === r.start) specNet = r.level;
     specNet += specDrift + (rng() - 0.5) * 2 * specVol;
     commNet += commDrift + (rng() - 0.5) * 2 * commVol;
     commNet = -specNet * 0.55 + (commNet + specNet * 0.55) * 0.95 + (rng() - 0.5) * commVol * 0.4;
+    nonreptNet += nonreptDrift + (rng() - 0.5) * 2 * nonreptVol;
     oi = oi * (1 + oiGrowth) * (0.98 + rng() * 0.04);
 
     // clamp net positions to something plausible as % of OI
     specNet = Math.max(-0.45, Math.min(0.45, specNet));
     commNet = Math.max(-0.45, Math.min(0.45, commNet));
+    nonreptNet = Math.max(-0.3, Math.min(0.3, nonreptNet));
 
     const d = new Date(end);
     d.setDate(d.getDate() - (nWeeks - 1 - i) * 7);
@@ -987,15 +995,18 @@ function genSampleSeries(meta, rng, nWeeks) {
     // split into long/short contracts (long is base OI*share, short is remainder)
     const specShare = 0.5 + specNet / 2;
     const commShare = 0.5 + commNet / 2;
+    const nonreptShare = 0.5 + nonreptNet / 2;
     const specLong  = Math.round(oi * specShare * (0.10 + rng() * 0.12));
     const specShort = Math.round(oi * (1 - specShare) * (0.10 + rng() * 0.12));
     const commLong  = Math.round(oi * commShare * (0.14 + rng() * 0.12));
     const commShort = Math.round(oi * (1 - commShare) * (0.14 + rng() * 0.12));
+    const nonreptLong  = Math.round(oi * nonreptShare * (0.03 + rng() * 0.05));
+    const nonreptShort = Math.round(oi * (1 - nonreptShare) * (0.03 + rng() * 0.05));
 
     weeks.push({
       date: d.toISOString().slice(0, 10),
       oi: Math.round(oi),
-      specLong, specShort, commLong, commShort,
+      specLong, specShort, commLong, commShort, nonreptLong, nonreptShort,
     });
   }
   return weeks;
@@ -1031,16 +1042,20 @@ function computeMetrics(weeks) {
   // to the 0.6th percentile). Percentiles and z-scores are stored separately.
   const specNetArr = new Array(n).fill(null);
   const commNetArr = new Array(n).fill(null);
+  const nonreptNetArr = new Array(n).fill(null);
   const specPctArr = new Array(n).fill(null);
   const commPctArr = new Array(n).fill(null);
+  const nonreptPctArr = new Array(n).fill(null);
   const specZArr   = new Array(n).fill(null);
   const commZArr   = new Array(n).fill(null);
+  const nonreptZArr = new Array(n).fill(null);
 
   for (let i = 0; i < n; i++) {
     const w = weeks[i];
     const oi = w.oi > 0 ? w.oi : 1;
     specNetArr[i] = (w.specLong - w.specShort) / oi;
     commNetArr[i] = (w.commLong - w.commShort) / oi;
+    nonreptNetArr[i] = ((w.nonreptLong || 0) - (w.nonreptShort || 0)) / oi;
   }
 
   function percentileRank(winVals, current) {
@@ -1067,11 +1082,14 @@ function computeMetrics(weeks) {
 
     const specWin = specNetArr.slice(lo, i + 1);
     const commWin = commNetArr.slice(lo, i + 1);
+    const nonreptWin = nonreptNetArr.slice(lo, i + 1);
 
     specPctArr[i] = percentileRank(specWin, specNetArr[i]);
     commPctArr[i] = percentileRank(commWin, commNetArr[i]);
+    nonreptPctArr[i] = percentileRank(nonreptWin, nonreptNetArr[i]);
     specZArr[i]   = zScore(specWin, specNetArr[i]);
     commZArr[i]   = zScore(commWin, commNetArr[i]);
+    nonreptZArr[i] = zScore(nonreptWin, nonreptNetArr[i]);
   }
 
   for (let i = 0; i < n; i++) {
@@ -1080,10 +1098,16 @@ function computeMetrics(weeks) {
     const oi = w.oi > 0 ? w.oi : 1;
     const specNet = (w.specLong - w.specShort) / oi;
     const commNet = (w.commLong - w.commShort) / oi;
+    const nonreptNet = ((w.nonreptLong || 0) - (w.nonreptShort || 0)) / oi;
     const pSpec = specPctArr[i];
     const pComm = commPctArr[i];
+    const pNonrept = nonreptPctArr[i];
     const sExt = pSpec >= EXT_HI ? 'L' : (pSpec <= EXT_LO ? 'S' : 'N');
     const cExt = pComm >= EXT_HI ? 'L' : (pComm <= EXT_LO ? 'S' : 'N');
+    // Non-reportable (small traders) is shown for context only — NOT part of
+    // confluence. Confluence is specifically the spec-vs-hedger contrarian
+    // setup; small-trader positioning isn't the "smart money" side of that.
+    const nExt = pNonrept >= EXT_HI ? 'L' : (pNonrept <= EXT_LO ? 'S' : 'N');
     const confluence = (sExt === 'L' && cExt === 'S') || (sExt === 'S' && cExt === 'L');
 
     const prev = i > 0 ? weeks[i - 1] : null;
@@ -1094,25 +1118,36 @@ function computeMetrics(weeks) {
     const commWoW = (prev && prevOI)
       ? ((w.commLong - w.commShort) / oi - (prev.commLong - prev.commShort) / prevOI) * 100
       : null;
+    const nonreptWoW = (prev && prevOI)
+      ? (((w.nonreptLong || 0) - (w.nonreptShort || 0)) / oi
+         - ((prev.nonreptLong || 0) - (prev.nonreptShort || 0)) / prevOI) * 100
+      : null;
 
     out[i] = {
       date: w.date,
       oi: w.oi,
       specLong: w.specLong, specShort: w.specShort,
       commLong: w.commLong, commShort: w.commShort,
+      nonreptLong: w.nonreptLong || 0, nonreptShort: w.nonreptShort || 0,
       specNetContracts: w.specLong - w.specShort,
       commNetContracts: w.commLong - w.commShort,
+      nonreptNetContracts: (w.nonreptLong || 0) - (w.nonreptShort || 0),
       specNetPct: specNet * 100,
       commNetPct: commNet * 100,
+      nonreptNetPct: nonreptNet * 100,
       specZ: specZArr[i],
       commZ: commZArr[i],
+      nonreptZ: nonreptZArr[i],
       specPct: pSpec,
       commPct: pComm,
+      nonreptPct: pNonrept,
       specExtreme: sExt,
       commExtreme: cExt,
+      nonreptExtreme: nExt,
       confluence,
       specWoW,
       commWoW,
+      nonreptWoW,
     };
   }
   return out;
@@ -1140,6 +1175,8 @@ function rowsToWeeks(rows) {
       specShort: parseInt(r.noncomm_positions_short_all, 10) || 0,
       commLong:  parseInt(r.comm_positions_long_all, 10)     || 0,
       commShort: parseInt(r.comm_positions_short_all, 10)    || 0,
+      nonreptLong:  parseInt(r.nonrept_positions_long_all, 10)  || 0,
+      nonreptShort: parseInt(r.nonrept_positions_short_all, 10) || 0,
     };
     if (!byCode[code]) byCode[code] = {};
     // CFTC publishes preliminary and final reports for the same date;
@@ -1564,7 +1601,8 @@ function buildDetail(meta, m, index) {
   swl.className = 'sw-legend';
   swl.innerHTML =
     '<span class="item"><span class="sw" style="background:#D3A24C"></span>Speculators</span>' +
-    '<span class="item"><span class="sw" style="background:#5FAE9E"></span>Commercials</span>';
+    '<span class="item"><span class="sw" style="background:#5FAE9E"></span>Commercials</span>' +
+    '<span class="item"><span class="sw" style="background:#7B8FA6"></span>Non-reportable</span>';
   sparkCol.appendChild(swl);
   grid.appendChild(sparkCol);
 
@@ -1577,7 +1615,8 @@ function buildDetail(meta, m, index) {
   const note = document.createElement('div');
   note.className = 'note';
   note.textContent = 'Percentiles are computed against each market\u2019s own trailing 156-week window (min 52 weeks). ' +
-    'Extremes are the 90th/10th percentiles. Confluence = spec extreme and commercial extreme in opposing directions. ' +
+    'Extremes are the 90th/10th percentiles. Confluence = spec extreme and commercial extreme in opposing directions ' +
+    '(non-reportable is shown for context only and is not part of confluence). ' +
     'Week-over-week change is in percentage points of open interest, independent of historical range.';
   wrap.appendChild(note);
   return wrap;
@@ -1592,14 +1631,19 @@ function buildStats(meta, m) {
     ['Open interest', fmtContracts(m.oi), 'contracts'],
     ['Spec net', fmtContracts(m.specNetContracts), fmtPct(m.specNetPct, 2) + '% OI'],
     ['Comm net', fmtContracts(m.commNetContracts), fmtPct(m.commNetPct, 2) + '% OI'],
+    ['Non-rept net', fmtContracts(m.nonreptNetContracts), fmtPct(m.nonreptNetPct, 2) + '% OI'],
     ['Spec percentile', fmtNum(m.specPct, 0) + 'th', extLabel(m.specExtreme)],
     ['Comm percentile', fmtNum(m.commPct, 0) + 'th', extLabel(m.commExtreme)],
+    ['Non-rept percentile', fmtNum(m.nonreptPct, 0) + 'th', extLabel(m.nonreptExtreme)],
     ['Spec z-score', fmtNum(m.specZ, 2), m.specExtreme === 'L' ? 'extreme long' : m.specExtreme === 'S' ? 'extreme short' : 'neutral'],
     ['Comm z-score', fmtNum(m.commZ, 2), m.commExtreme === 'L' ? 'extreme long' : m.commExtreme === 'S' ? 'extreme short' : 'neutral'],
+    ['Non-rept z-score', fmtNum(m.nonreptZ, 2), m.nonreptExtreme === 'L' ? 'extreme long' : m.nonreptExtreme === 'S' ? 'extreme short' : 'neutral'],
     ['Spec WoW', fmtPct(m.specWoW, 2) + 'pp', 'of open interest'],
     ['Comm WoW', fmtPct(m.commWoW, 2) + 'pp', 'of open interest'],
+    ['Non-rept WoW', fmtPct(m.nonreptWoW, 2) + 'pp', 'of open interest'],
     ['Spec position', fmtNum(m.specNetPct, 2) + '%', 'of open interest'],
     ['Comm position', fmtNum(m.commNetPct, 2) + '%', 'of open interest'],
+    ['Non-rept position', fmtNum(m.nonreptNetPct, 2) + '%', 'of open interest'],
   ];
   for (const [k, v, sub] of items) {
     const st = document.createElement('div');
@@ -1645,8 +1689,9 @@ function buildSpark(code, index) {
   }
   const spec = slice.map(m => m.specNetPct);
   const comm = slice.map(m => m.commNetPct);
-  let mn = Math.min(...spec, ...comm, 0);
-  let mx = Math.max(...spec, ...comm, 0);
+  const nonrept = slice.map(m => m.nonreptNetPct);
+  let mn = Math.min(...spec, ...comm, ...nonrept, 0);
+  let mx = Math.max(...spec, ...comm, ...nonrept, 0);
   const range = (mx - mn) || 1;
   mn -= range * 0.05; mx += range * 0.05;
 
@@ -1656,7 +1701,7 @@ function buildSpark(code, index) {
   const svg = document.createElementNS(svgNS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Sparkline of spec and commercial net positioning');
+  svg.setAttribute('aria-label', 'Sparkline of spec, commercial, and non-reportable net positioning');
 
   // zero line
   const zl = document.createElementNS(svgNS, 'line');
@@ -1688,6 +1733,7 @@ function buildSpark(code, index) {
     return p;
   }
 
+  svg.appendChild(line(nonrept, '#7B8FA6', 1));
   svg.appendChild(line(comm, '#5FAE9E', 1.2));
   svg.appendChild(line(spec, '#D3A24C', 1.6));
 

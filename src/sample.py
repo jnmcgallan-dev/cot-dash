@@ -31,13 +31,16 @@ def gen_sample_series(rng, n_weeks=N_WEEKS):
     oi_growth = 0.001 + rng.random() * 0.003
     mean_spec = (rng.random() - 0.5) * 0.10
     mean_comm = -mean_spec * (0.6 + rng.random() * 0.8)
+    nonrept_drift = (rng.random() - 0.5) * 0.0003
+    nonrept_vol = 0.002 + rng.random() * 0.006
+    mean_nonrept = (rng.random() - 0.5) * 0.05
 
     # regime shifts so a handful of markets reach extremes
     regimes = []
     for _ in range(1 + int(rng.random() * 3)):
         regimes.append((int(rng.random() * n_weeks * 0.8), (rng.random() - 0.5) * 0.24))
 
-    spec_net, comm_net, oi = mean_spec, mean_comm, float(base_oi)
+    spec_net, comm_net, nonrept_net, oi = mean_spec, mean_comm, mean_nonrept, float(base_oi)
     rows = []
     for i in range(n_weeks):
         for start, level in regimes:
@@ -51,14 +54,17 @@ def gen_sample_series(rng, n_weeks=N_WEEKS):
             + (comm_net + spec_net * 0.55) * 0.95
             + (rng.random() - 0.5) * comm_vol * 0.4
         )
+        nonrept_net += nonrept_drift + (rng.random() - 0.5) * 2 * nonrept_vol
         oi *= (1 + oi_growth) * (0.98 + rng.random() * 0.04)
 
         spec_net = max(-0.45, min(0.45, spec_net))
         comm_net = max(-0.45, min(0.45, comm_net))
+        nonrept_net = max(-0.3, min(0.3, nonrept_net))
 
         d = end - timedelta(days=(n_weeks - 1 - i) * 7)
         spec_share = 0.5 + spec_net / 2
         comm_share = 0.5 + comm_net / 2
+        nonrept_share = 0.5 + nonrept_net / 2
 
         rows.append(
             {
@@ -68,6 +74,8 @@ def gen_sample_series(rng, n_weeks=N_WEEKS):
                 "spec_short": int(round(oi * (1 - spec_share) * (0.10 + rng.random() * 0.12))),
                 "comm_long": int(round(oi * comm_share * (0.14 + rng.random() * 0.12))),
                 "comm_short": int(round(oi * (1 - comm_share) * (0.14 + rng.random() * 0.12))),
+                "nonrept_long": int(round(oi * nonrept_share * (0.03 + rng.random() * 0.05))),
+                "nonrept_short": int(round(oi * (1 - nonrept_share) * (0.03 + rng.random() * 0.05))),
             }
         )
 

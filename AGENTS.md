@@ -22,12 +22,13 @@ every sector show full positioning). Descriptive tool — **not** a trading-sign
 | Dashboard file (single-file app) | `cot-dash/index.html` |
 | Python pipeline | `cot-dash/src/` |
 | Artifacts (heatmap PNG, live JSON) | `cot-dash/artifacts/` |
-| Hosted URL (GitHub Pages) | https://huskytradingltd.github.io/cot-dash/ |
-| GitHub repo | `huskytradingltd/cot-dash` |
+| Hosted URL (GitHub Pages) | https://jnmcgallan-dev.github.io/cot-dash/ |
+| GitHub repo | `jnmcgallan-dev/cot-dash` |
 
-> ⚠️ The local `cot-dash/` folder is **not** a git repo. The hosted URL currently
-> serves a DIFFERENT, older build ("Positioning Ledger — COT Report"). The local
-> build is newer and not yet deployed.
+> Note: the repo/org above is stale as of an earlier session — corrected
+> 2026-08-25 by reading `git remote -v` directly rather than trusting this
+> file. `cot-dash/` **is** a git repo (branch `main`); verify against
+> `git remote -v` before trusting this table again.
 
 ## Data source
 
@@ -83,6 +84,17 @@ live data. Two checks already pass 41/41 for spec_pct AND confluence:
 
 ## Recent work (what was built/fixed)
 
+- **2026-08-25 — Added non-reportable (small trader) tracking.** Full parity
+  with spec/comm: net/pct/percentile/z-score/WoW, in both engines
+  (`index.html::computeMetrics` and `src/metrics.py::compute_metrics`), plus
+  the sample-data generators (`index.html::genSampleSeries`,
+  `src/sample.py::gen_sample_series`) and the live fetch parsers
+  (`index.html::rowsToWeeks`, `src/fetch.py::rows_to_market_frames`) —
+  `nonrept_positions_long_all`/`nonrept_positions_short_all` from the same
+  CFTC Socrata rows already being fetched. Deliberately NOT part of
+  `confluence` (that stays spec-vs-commercial only — see the docstrings).
+  Verified both engines agree on live NQ data (percentile 91, z 1.28, WoW
+  -0.19 — exact match) before calling it done.
 - **2026-08-15 — Switched to futures-and-options COMBINED report** (`srt6-5q2f`,
   filtered `Combined`) so FX/all sectors include options. Report date went
   2026-08-04 → 2026-08-11; picture changed (e.g. EUR now Extreme Short + confluence).

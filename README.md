@@ -19,16 +19,19 @@ contrarian setup), and how positioning is flowing week-over-week.
   Combined) and recomputes all metrics in the browser.
 - Falls back to embedded synthetic **sample data** on first load / offline,
   clearly labeled.
-- Click any market to expand a 3-year sparkline (spec vs. commercial) plus a
-  full stat breakdown.
+- Click any market to expand a 3-year sparkline (spec vs. commercial vs.
+  non-reportable) plus a full stat breakdown.
 - Flags markets in the top/bottom decile of their **own** 3-year positioning
   history, and "confluence" cases where specs and commercials are extreme in
   opposing directions.
 - Shows week-over-week change in net positioning (% of open interest).
+- Tracks non-reportable (small trader) positioning alongside spec/commercial
+  for context — not part of the confluence signal, which is specifically the
+  spec-vs-hedger contrarian setup.
 
 ## Metrics (causal — trailing window only)
 
-1. **Net position** = long − short (spec / commercial).
+1. **Net position** = long − short (spec / commercial / non-reportable).
 2. **OI normalization** = net ÷ open interest.
 3. **Rolling z-score** = (x − mean) ÷ std, 156-week (3-year) window, min 52
    weeks of history required.

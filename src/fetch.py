@@ -87,6 +87,8 @@ def rows_to_market_frames(rows):
             "spec_short": _to_int(r.get("noncomm_positions_short_all")),
             "comm_long": _to_int(r.get("comm_positions_long_all")),
             "comm_short": _to_int(r.get("comm_positions_short_all")),
+            "nonrept_long": _to_int(r.get("nonrept_positions_long_all")),
+            "nonrept_short": _to_int(r.get("nonrept_positions_short_all")),
         }
         week = by_code.setdefault(code, {})
         prev = week.get(d)
