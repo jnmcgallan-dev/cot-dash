@@ -1896,6 +1896,25 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* =====================================================================
+   Embed auto-resize
+   When loaded inside an iframe (e.g. trading-bot-v3's COT+ tab), report
+   this page's height to the parent on any change — data refresh, market
+   expand/collapse, window resize — so the parent can size the iframe to
+   fit and avoid a nested scrollbar. No-op / harmless when not embedded.
+   ===================================================================== */
+if (window.parent && window.parent !== window) {
+  let lastSent = 0;
+  function sendHeight() {
+    const h = document.documentElement.scrollHeight;
+    if (Math.abs(h - lastSent) < 2) return; // avoid postMessage spam on sub-pixel churn
+    lastSent = h;
+    window.parent.postMessage({ source: 'cot-dash', height: h }, '*');
+  }
+  new ResizeObserver(sendHeight).observe(document.body);
+  window.addEventListener('load', sendHeight);
+}
 </script>
 </body>
 </html>
